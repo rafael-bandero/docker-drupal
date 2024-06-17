@@ -1,0 +1,59 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: unless-stopped
+    ports:
+      - 3306:3306
+    env_file: .env
+    volumes:
+      - db-data:/var/lib/mysql
+    command: '--default-authentication-plugin=caching_sha2_password'
+    networks:
+      - app-network
+
+  drupal:
+    depends_on:
+      - db
+    image: drupal:10.2.7-fpm-alpine
+    container_name: drupal
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DRUPAL_DATABASE_HOST=db
+      - DRUPAL_DATABASE_NAME=$MYSQL_DATABASE
+      - DRUPAL_DATABASE_USERNAME=$MYSQL_USER
+      - DRUPAL_DATABASE_PASSWORD=$MYSQL_PASSWORD
+      # Generate a salt with: `php -r "echo bin2hex(random_bytes(25));"`
+      - DRUPAL_HASH_SALT=db0de8a1556aa5348f87cfc950cd2c9641713d46e9412c8b05
+                        
+    volumes:
+      - drupal-data:/var/www/html
+    networks:
+      - app-network
+
+  webserver:
+    depends_on:
+      - drupal
+    image: nginx:1.27.0-alpine
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - drupal-data:/var/www/html
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/certs:/etc/nginx/certs
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db-data:
+    driver: local
+  drupal-data:
+    driver: local
